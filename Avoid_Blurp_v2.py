@@ -5,7 +5,7 @@ from typing import Dict, Any
 import tensorflow as tf
 from tensorflow import keras
 
-# On-Policy Monte Carlo Control (can be changed)
+# SARSA (TD)
 
 # Method only for Manual Play
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
@@ -20,7 +20,8 @@ def observation_to_input(observation) :
 def reward_shaping(truncated, terminated) :
     if truncated : return -100  # Failed
     if terminated : return 100  # Succeeded
-    return 0.1  # Living reward
+    # return 0.1  # Living reward
+    return 0.0  # No living reward
 # ---------------------------------
 
 # ---------- Agent Class ----------
@@ -90,7 +91,7 @@ def train() :
         keras.layers.Dense(
             units = 3,  # Number of actions (0: Stop, 1: Left, 2: Right)
             activation = keras.activations.linear,
-            kernel_initializer = keras.initializers.HeNormal(seed = seed_),
+            kernel_initializer = keras.initializers.GlorotNormal(seed = seed_),
         )
     ])
     
@@ -114,24 +115,45 @@ def train() :
             next_observation, reward, truncated, terminated, info = env.step(action)
             done = truncated or terminated
             reward = reward_shaping(truncated, terminated)
-            history.append((state, action, reward))
+            # history.append((state, action, reward))
+            # --- SARSA Update ---
+            next_state = observation_to_input(next_observation)
+            next_action = agent.action_selection(next_state)
+            with tf.GradientTape() as tape :
+                state_tensor = keras.ops.expand_dims(state, axis = 0)
+                Q_s_a = model(state_tensor)[0, action]  # Q(s, a)
+                if done : target = reward
+                else :
+                    next_state_tensor = keras.ops.expand_dims(next_state, axis = 0)
+                    Q_snext_anext = model(next_state_tensor)[0, next_action]  # Q(s', a')
+                    target = reward + agent.gamma * Q_snext_anext
+                target_tensor = tf.convert_to_tensor([target], dtype = tf.float32)
+                loss = objective_function(target_tensor, tf.convert_to_tensor([Q_s_a], dtype = tf.float32))
+            # --- END of SARSA Update ---
+            # Gradient update
+            gradients = tape.gradient(loss, model.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+            
             observation = next_observation
+            state = next_state
+            action = next_action
+            
         # Epsilon Decay
         agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay_rate)
         # Monte Carlo Update
-        G = 0.0  # Return
-        for(state, action, reward) in reversed(history) :
-            G = reward + agent.gamma * G
-            # Model update (by GradientTape)
-            with tf.GradientTape() as tape :
-                state_tensor = keras.ops.expand_dims(state, axis = 0)
-                Q = model(state_tensor)
-                Q_action = Q[:, action]
-                G_tensor = tf.convert_to_tensor([G], dtype = tf.float32)
-                loss = objective_function(G_tensor, Q_action)
-            # Calculate gradients and Model update
-            gradients = tape.gradient(loss, model.trainable_variables)
-            optimizer.apply_gradients(zip(gradients, model.trainable_variables))
+        # G = 0.0  # Return
+        # for(state, action, reward) in reversed(history) :
+        #     G = reward + agent.gamma * G
+        #     # Model update (by GradientTape)
+        #     with tf.GradientTape() as tape :
+        #         state_tensor = keras.ops.expand_dims(state, axis = 0)
+        #         Q = model(state_tensor)
+        #         Q_action = Q[:, action]
+        #         G_tensor = tf.convert_to_tensor([G], dtype = tf.float32)
+        #         loss = objective_function(G_tensor, Q_action)
+        #     # Calculate gradients and Model update
+        #     gradients = tape.gradient(loss, model.trainable_variables)
+        #     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f}", end="\r")      
     
     agent.save("./moka.keras")
