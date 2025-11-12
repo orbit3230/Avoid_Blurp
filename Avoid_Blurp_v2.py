@@ -17,11 +17,24 @@ def observation_to_input(observation) :
     input_obs = np.concatenate([player_obs, enemies_obs])  # shape: (185, )
     return input_obs
 
-def reward_shaping(truncated, terminated) :
+def reward_shaping(observation, truncated, terminated) :
     if truncated : return -100  # Failed
     if terminated : return 100  # Succeeded
-    # return 0.1  # Living reward
-    return 0.0  # No living reward
+    # Give Reward based on distance to nearest blurp
+    (x, y) = observation["player"][:2]
+    enemies = observation["enemies"]
+    min_distance  = 1e20
+    for enemy in enemies :
+        if(np.any(enemy)) :  # not a dummy
+            (ex, ey) = enemy[:2]
+            distance = (ex-x)**2 + (ey-y)**2
+            min_distance = min(min_distance, distance)
+            
+    positive_threshold = (50+200)**2
+    if(min_distance >= positive_threshold) : return 0.1
+    else : return -0.1
+    
+            
 # ---------------------------------
 
 # ---------- Agent Class ----------
@@ -71,7 +84,7 @@ def train() :
     gamma = 0.99
     epsilon_min = 0.1
     epsilon_start = 1.0
-    epsilon_decay_rate = 0.9995
+    epsilon_decay_rate = 0.99965
     episodes = 10000
     seed_ = 42
     
@@ -107,6 +120,7 @@ def train() :
         history = []  # (state, action, reward)
         observation, info = env.reset()
         done = False
+        total_reward = 0.0
         # Each Episode
         while not done :
             state = observation_to_input(observation)
@@ -114,7 +128,8 @@ def train() :
             action = agent.action_selection(state)
             next_observation, reward, truncated, terminated, info = env.step(action)
             done = truncated or terminated
-            reward = reward_shaping(truncated, terminated)
+            reward = reward_shaping(next_observation, truncated, terminated)
+            total_reward += reward
             # history.append((state, action, reward))
             # --- SARSA Update ---
             next_state = observation_to_input(next_observation)
@@ -154,7 +169,7 @@ def train() :
         #     # Calculate gradients and Model update
         #     gradients = tape.gradient(loss, model.trainable_variables)
         #     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f}", end="\r")      
+        print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f} | Total Reward: {total_reward:.2f}", end="\r")      
     
     agent.save("./moka.keras")
     env.close()
