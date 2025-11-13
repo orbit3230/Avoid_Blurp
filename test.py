@@ -1,5 +1,5 @@
 import kymnasium as kym
-from Avoid_Blurp import Agent
+from Avoid_Blurp_v2 import Agent
 
 agent = Agent.load("./moka.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
 

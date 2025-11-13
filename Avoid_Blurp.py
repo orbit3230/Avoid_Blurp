@@ -70,7 +70,7 @@ def train() :
     gamma = 0.99
     epsilon_min = 0.1
     epsilon_start = 1.0
-    epsilon_decay_rate = 0.9995
+    epsilon_decay_rate = 0.99965
     episodes = 10000
     seed_ = 42
     
@@ -106,14 +106,16 @@ def train() :
         history = []  # (state, action, reward)
         observation, info = env.reset()
         done = False
+        total_reward = 0.0
         # Each Episode
         while not done :
             state = observation_to_input(observation)
             # Epsilon-Greedy Action Selection
             action = agent.action_selection(state)
-            next_observation, reward, truncated, terminated, info = env.step(action)
+            next_observation, reward, terminated, truncated, info = env.step(action)
             done = truncated or terminated
             reward = reward_shaping(truncated, terminated)
+            total_reward += reward
             history.append((state, action, reward))
             observation = next_observation
         # Epsilon Decay
@@ -132,9 +134,9 @@ def train() :
             # Calculate gradients and Model update
             gradients = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f}", end="\r")      
+        print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f} | Total Reward: {total_reward:.2f}", end="\r")      
     
-    agent.save("./moka.keras")
+    agent.save("./moka_v1.keras")
     env.close()
 
 def test() :
@@ -144,7 +146,7 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v1.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False

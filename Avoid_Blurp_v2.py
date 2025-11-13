@@ -126,7 +126,7 @@ def train() :
             state = observation_to_input(observation)
             # Epsilon-Greedy Action Selection
             action = agent.action_selection(state)
-            next_observation, reward, truncated, terminated, info = env.step(action)
+            next_observation, reward, terminated, truncated, info = env.step(action)
             done = truncated or terminated
             reward = reward_shaping(next_observation, truncated, terminated)
             total_reward += reward
@@ -171,7 +171,7 @@ def train() :
         #     optimizer.apply_gradients(zip(gradients, model.trainable_variables))
         print(f"Episode {episode + 1}/{episodes} completed. | Epsilon: {agent.epsilon:.4f} | Total Reward: {total_reward:.2f}", end="\r")      
     
-    agent.save("./moka.keras")
+    agent.save("./moka_v2.keras")
     env.close()
 
 def test() :
@@ -181,7 +181,7 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v2.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
