@@ -5,7 +5,7 @@ from typing import Dict, Any
 import tensorflow as tf
 from tensorflow import keras
 
-# SARSA (TD)
+# Off-Policy Q-Learning (TD)
 
 # Method only for Manual Play
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
@@ -141,11 +141,12 @@ def train() :
     for episode in range(episodes) :
         observation, info = env.reset()
         state = observation_to_input(observation)
-        action = agent.action_selection(state)  # Select First Action at the Out of the loop
+        # action = agent.action_selection(state)
         done = False
         total_reward = 0.0
         # Each Episode
         while not done :
+            action = agent.action_selection(state)
             # (A) -> (R, S')
             next_observation, reward, terminated, truncated, info = env.step(action)
             done = truncated or terminated
@@ -153,32 +154,35 @@ def train() :
             total_reward += reward
             # (S') -> (A')
             next_state = observation_to_input(next_observation)
-            next_action = agent.action_selection(next_state)
-            # --- SARSA Update --- (S, A, R, S', A')
+            # next_action = agent.action_selection(next_state)
+            # --- Q-Learning Update ---
             with tf.GradientTape() as tape :
                 state_tensor = keras.ops.expand_dims(state, axis = 0)
                 Q_s_a = model(state_tensor)[0, action]  # Q(s, a)
                 if done : target = reward
                 else :
                     next_state_tensor = keras.ops.expand_dims(next_state, axis = 0)
-                    Q_snext_anext = model(next_state_tensor)[0, next_action]  # Q(s', a')
-                    target = reward + agent.gamma * Q_snext_anext
+                    # Q_snext_anext = model(next_state_tensor)[0, next_action]  # Q(s', a')
+                    # Main Change for Q-Learning
+                    Q_snext = model(next_state_tensor)[0]  # Only Calculate Q(s')
+                    max_Q_snext = tf.reduce_max(Q_snext)
+                    target = reward + agent.gamma * max_Q_snext
                 target_tensor = tf.convert_to_tensor([target], dtype = tf.float32)
                 loss = objective_function(target_tensor, tf.convert_to_tensor([Q_s_a], dtype = tf.float32))
-            # --- END of SARSA Update ---
+            # --- END of Q-Learning Update ---
             # Gradient update
             gradients = tape.gradient(loss, model.trainable_variables)
             optimizer.apply_gradients(zip(gradients, model.trainable_variables))
             
             observation = next_observation
             state = next_state
-            action = next_action
+            # action = next_action
             
         # Epsilon Decay
         agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay_rate)
-        print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec", end="\r")
+        print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec", end="\r")   
     
-    agent.save("./moka_v2.keras")
+    agent.save("./moka_v3.keras")
     env.close()
 
 def test() :
@@ -188,21 +192,11 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka_v2.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v3.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
         while not done :
-            # --- 🔽 디버깅 코드 추가 🔽 ---
-            state = observation_to_input(observation)
-            state_tensor = keras.ops.expand_dims(state, axis = 0)
-            
-            # 모델을 통과시켜 Q-value 예측
-            q_values = agent.model(state_tensor).numpy()[0]
-            
-            # 예측된 Q-value를 포맷에 맞게 출력
-            print(f"Q-Values => [Stop: {q_values[0]:.3f} | Left: {q_values[1]:.3f} | Right: {q_values[2]:.3f}]")
-            # --- 🔼 디버깅 코드 종료 🔼 ---
             action = agent.act(observation, info)
             observation, _, terminated, truncated, info = env.step(action)
             done = terminated or truncated
@@ -216,5 +210,5 @@ def test() :
 # ---------- End of Training & Testing ----------
     
 if __name__ == "__main__" :
-    # train()
+    train()
     test()

@@ -11,10 +11,31 @@ from tensorflow import keras
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
 
 # ---------- Helper Functions ----------
+# revised : player width/height, enemy width/height are fixed. So does not need to be included.
 def observation_to_input(observation) :
-    player_obs = observation["player"]  # shape: (5, )
-    enemies_obs = observation["enemies"].flatten()  # shape: (30, 6)
-    input_obs = np.concatenate([player_obs, enemies_obs])  # shape: (185, )
+    # Max values for normalization
+    SCREEN_WIDTH = 600.0
+    SCREEN_HEIGHT = 750.0
+    PLAYER_MAX_VELOCITY = 10.0
+    ENEMY_MAX_VELOCITY = 20.0
+    ENEMY_MAX_ACCELERATION = 0.20
+    
+    player_obs = observation["player"]  # shape: (3, )
+    player_features = np.array([
+        player_obs[0] / SCREEN_WIDTH,
+        player_obs[1] / SCREEN_HEIGHT,
+        player_obs[4] / PLAYER_MAX_VELOCITY
+    ])
+    enemies_observation = observation["enemies"]
+    enemies_features = enemies_observation[:, [0, 1, 4, 5]].astype(np.float32)
+    for i in range(enemies_features.shape[0]) :
+        enemies_features[i, 0] /= SCREEN_WIDTH
+        enemies_features[i, 1] /= SCREEN_HEIGHT
+        enemies_features[i, 2] /= ENEMY_MAX_VELOCITY
+        enemies_features[i, 3] /= ENEMY_MAX_ACCELERATION
+    
+    
+    input_obs = np.concatenate([player_features, enemies_features.flatten()])  # shape: (123, )
     return input_obs
 
 def reward_shaping(truncated, terminated) :
@@ -76,7 +97,7 @@ def train() :
     
     # Neural Network Model Creation
     model = keras.models.Sequential([
-        keras.layers.Input(shape = (185, )),  # player(5) + blurps(6*30) = 185
+        keras.layers.Input(shape = (123, )),  # player(3) + blurps(4*30) = 123
         keras.layers.Dense(
             units = 64,
             activation = keras.activations.relu,
