@@ -131,8 +131,10 @@ def train() :
     gamma = 0.99
     epsilon_min = 0.1
     epsilon_start = 1.0
-    epsilon_decay_rate = 0.99967
+    # epsilon_decay_rate = 0.99967
     episodes = 10000
+    epsilon_linear_decay = (epsilon_start - epsilon_min) / (episodes * 0.6)
+    full_exploration = episodes * 0.2
     seed_ = 42
     # Hyperparameters for Replay Buffer
     replay_buffer_size = 50000
@@ -219,9 +221,11 @@ def train() :
                 train_step_counter += 1
                 if(train_step_counter % target_update_frequency == 0) : target_model.set_weights(model.get_weights())
             
-        # Epsilon Decay
-        agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay_rate)
-        print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec", end="\r")   
+        # Epsilon Linear Decay
+        # agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay_rate)
+        if(episode < full_exploration) : pass
+        else : agent.epsilon = max(epsilon_min, agent.epsilon - epsilon_linear_decay)
+        print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec | Epsilon: {agent.epsilon:.4f}", end="\r")
     
     agent.save("./moka_v5.keras")
     env.close()
