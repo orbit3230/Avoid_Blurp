@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow import keras
 
 # Off-Policy Q-Learning (TD)
+# reward revised version
 
 # Method only for Manual Play
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
@@ -45,16 +46,19 @@ def reward_shaping(observation, truncated, terminated) :
     (x, y) = observation["player"][:2]
     enemies = observation["enemies"]
     min_distance  = 1e20
+    above_my_head = 0.0
     for enemy in enemies :
         if(np.any(enemy)) :  # not a dummy
             (ex, ey) = enemy[:2]
             distance = (ex-x)**2 + (ey-y)**2
             min_distance = min(min_distance, distance)
+            if(ey < y and abs(ex - x) < 50.0) :
+                above_my_head += 0.1
             
     if(min_distance > ((600.0)**2 + (750.0)**2)) : return 0.0
     # Normalized -> (-0.1) ~ 0.0
     normalized_distance = ((min_distance / ((600.0)**2 + (750.0)**2)) - 1.0) * 0.1
-    return normalized_distance
+    return normalized_distance - above_my_head
     
             
 # ---------------------------------
@@ -182,7 +186,7 @@ def train() :
         agent.epsilon = max(epsilon_min, agent.epsilon * epsilon_decay_rate)
         print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec", end="\r")   
     
-    agent.save("./moka_v3.keras")
+    agent.save("./moka_v4.keras")
     env.close()
 
 def test() :
@@ -192,7 +196,7 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka_v3.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v4.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
