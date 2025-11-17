@@ -8,12 +8,20 @@ import tensorflow as tf
 from tensorflow import keras
 
 # DQN (Deep Q-Network)
-# Simple & Resized Reward Shaping Version !!
+# Patch Note v7
+# 1. Enemy observation sorting
+# 2. Prioritized Experience Replay
+# 3. DDQN (Double DQN)
 
 # Method only for Manual Play
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
 
 # ---------- Helper Functions ----------
+# Desending order by enemy y position
+def sort_enemies(enemies_observation) :
+    sorted_indices = np.argsort(enemies_observation[:, 1])[::-1]  # [::-1] for descending order
+    return enemies_observation[sorted_indices]
+
 # revised : player width/height, enemy width/height are fixed. So does not need to be included.
 def observation_to_input(observation) :
     # Max values for normalization
@@ -29,7 +37,7 @@ def observation_to_input(observation) :
         player_obs[1] / SCREEN_HEIGHT,
         player_obs[4] / PLAYER_MAX_VELOCITY
     ])
-    enemies_observation = observation["enemies"]
+    enemies_observation = sort_enemies(np.array(observation["enemies"]))
     enemies_features = enemies_observation[:, [0, 1, 4, 5]].astype(np.float32)
     for i in range(enemies_features.shape[0]) :
         enemies_features[i, 0] /= SCREEN_WIDTH
@@ -55,7 +63,11 @@ class ReplayBuffer :
         self.batch_size = batch_size
         self.random = random.Random(seed)
         
+    # Give bigger weight for terminated & truncated experiences
     def store_transition(self, state, action, reward, next_state, done) :
+        if done :  # Store multiple times -> prioritized experience replay (Simplified Version)
+            for _ in range(10) : self.buffer.append((state, action, reward, next_state, done))
+            return
         self.buffer.append((state, action, reward, next_state, done))
         
     def sample_batch(self) :
@@ -188,11 +200,14 @@ def train() :
             if(len(replay_buffer) >= min_replay_size) :
                 states_batch, actions_batch, rewards_batch, next_states_batch, dones_batch = replay_buffer.sample_batch()
                 with tf.GradientTape() as tape :
-                    # --- target Q-Value Calculation ---
-                    # Q_snext = model(next_states_batch)  # Q(s') for all actions
-                    Q_snext = target_model(next_states_batch)  # Q(s') for all actions
-                    max_Q_snext = tf.reduce_max(Q_snext, axis = 1)
-                    target_Q_values = rewards_batch + agent.gamma * max_Q_snext * (1.0 - dones_batch)
+                    # --- target Q-Value Calculation (DDQN) ---
+                    Q_snext_main = model(next_states_batch)  # Q(s') from main model
+                    best_actions = tf.argmax(Q_snext_main, axis = 1, output_type = tf.int32)  # Best actions from main model
+                    Q_snext_target = target_model(next_states_batch)  # Q(s') from target model
+                    batch_indices = tf.range(batch_size, dtype = tf.int32)
+                    action_indices = tf.stack([batch_indices, best_actions], axis = 1)
+                    ddqn_Q_snext = tf.gather_nd(Q_snext_target, action_indices)  # Q(s', a') from target model, which main model selected
+                    target_Q_values = rewards_batch + agent.gamma * ddqn_Q_snext * (1.0 - dones_batch)
                     # --- Current Q-Value Calculation ---
                     Q_s = model(states_batch)  # Q(s) for all actions
                     batch_indices = tf.range(batch_size, dtype = tf.int32)
@@ -215,7 +230,7 @@ def train() :
         else : agent.epsilon = max(epsilon_min, agent.epsilon - epsilon_linear_decay)
         print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec | Epsilon: {agent.epsilon:.4f}", end="\r")
     
-    agent.save("./moka_v6.keras")
+    agent.save("./moka_v7.keras")
     env.close()
 
 def test() :
@@ -225,23 +240,13 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka_v6.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v7.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
         while not done :
             action = agent.act(observation, info)
             observation, _, terminated, truncated, info = env.step(action)
-            # --- 🔽 디버깅 코드 추가 🔽 ---
-            state = observation_to_input(observation)
-            state_tensor = keras.ops.expand_dims(state, axis = 0)
-                        
-            # 모델을 통과시켜 Q-value 예측
-            q_values = agent.model(state_tensor).numpy()[0]
-                        
-            # 예측된 Q-value를 포맷에 맞게 출력
-            print(f"Q-Values => [Stop: {q_values[0]:.3f} | Left: {q_values[1]:.3f} | Right: {q_values[2]:.3f}]", end=" \r")
-            # --- 🔼 디버깅 코드 종료 🔼 ---
             done = terminated or truncated
             
         time_elapsed = info.get("time_elapsed", 0.0)
@@ -253,5 +258,5 @@ def test() :
 # ---------- End of Training & Testing ----------
     
 if __name__ == "__main__" :
-    # train()
+    train()
     test()
