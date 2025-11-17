@@ -65,7 +65,7 @@ class ReplayBuffer :
         
     # Give bigger weight for terminated & truncated experiences
     def store_transition(self, state, action, reward, next_state, done) :
-        if done :  # Store multiple times -> prioritized experience replay (Simplified Version)
+        if(done):  # Store multiple times -> prioritized experience replay (Simplified Version)
             for _ in range(10) : self.buffer.append((state, action, reward, next_state, done))
             return
         self.buffer.append((state, action, reward, next_state, done))
