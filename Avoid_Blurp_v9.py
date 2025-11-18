@@ -7,11 +7,9 @@ import random
 import tensorflow as tf
 from tensorflow import keras
 
-# DQN (Deep Q-Network)
-# Patch Note v8
-# 1. Reward Shaping Mechanism Update
-# -> CheckPoint Concept Added
-# -> Reward size Adjusted
+# DDQN (Double Deep Q-Network from v7)
+# Patch Note v9
+# 1. Simplified Reward Shaping
 
 # Method only for Manual Play
 # kym.avoid_blurp.ManualPlayWrapper("kymnasium/AvoidBlurp-Normal-v0", debug=True).play()
@@ -49,13 +47,10 @@ def observation_to_input(observation) :
     input_obs = np.concatenate([player_features, enemies_features.flatten()])  # shape: (123, )
     return input_obs
 
-def reward_shaping(truncated, terminated, time, checkpoint_time) :
-    if(truncated) : return -10, checkpoint_time   # Failed
-    if(terminated) : return 10, checkpoint_time # Succeeded
-    if(time >= checkpoint_time) :
-        checkpoint_time += 10
-        return 0.83, checkpoint_time  
-    return 0.001, checkpoint_time
+def reward_shaping(truncated, terminated) :
+    if(truncated) : return -10   # Failed
+    if(terminated) : return 10   # Succeeded
+    return 0.1
 # ---------------------------------
 
 # ---------- Replay Buffer Class ----------
@@ -185,15 +180,13 @@ def train() :
         # action = agent.action_selection(state)
         done = False
         total_reward = 0.0
-        checkpoint_time = 10  # seconds (~ 120)
         # Each Episode
         while not done :
             action = agent.action_selection(state)
             # (A) -> (R, S')
             next_observation, reward, terminated, truncated, info = env.step(action)
             done = truncated or terminated
-            time = info.get("time_elapsed", 0.0)
-            reward, checkpoint_time = reward_shaping(truncated, terminated, time, checkpoint_time)
+            reward = reward_shaping(truncated, terminated)
             total_reward += reward
             # (S') -> (A')
             next_state = observation_to_input(next_observation)
@@ -232,7 +225,7 @@ def train() :
         else : agent.epsilon = max(epsilon_min, agent.epsilon - epsilon_linear_decay)
         print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec | Epsilon: {agent.epsilon:.4f}", end="\r")
     
-    agent.save("./moka_v8.keras")
+    agent.save("./moka_v9.keras")
     env.close()
 
 def test() :
@@ -242,23 +235,13 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka_v8.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v9.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
         while not done :
             action = agent.act(observation, info)
             observation, _, terminated, truncated, info = env.step(action)
-            # --- 🔽 디버깅 코드 추가 🔽 ---
-            state = observation_to_input(observation)
-            state_tensor = keras.ops.expand_dims(state, axis = 0)
-                        
-            # 모델을 통과시켜 Q-value 예측
-            q_values = agent.model(state_tensor).numpy()[0]
-                        
-            # 예측된 Q-value를 포맷에 맞게 출력
-            print(f"Q-Values => [Stop: {q_values[0]:.3f} | Left: {q_values[1]:.3f} | Right: {q_values[2]:.3f}]", end=" \r")
-            # --- 🔼 디버깅 코드 종료 🔼 ---
             done = terminated or truncated
             
         time_elapsed = info.get("time_elapsed", 0.0)
@@ -270,5 +253,5 @@ def test() :
 # ---------- End of Training & Testing ----------
     
 if __name__ == "__main__" :
-    # train()
+    train()
     test()
