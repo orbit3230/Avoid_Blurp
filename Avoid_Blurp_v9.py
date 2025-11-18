@@ -136,7 +136,7 @@ def train() :
     batch_size = 32
     min_replay_size = 1000  # min buffer size to start training
     # Hyperparameters for Target Network
-    target_update_frequency = 1000
+    target_update_frequency = 3000
     train_step_counter = 0
     
     # Neural Network Model Creation
