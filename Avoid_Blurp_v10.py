@@ -94,7 +94,7 @@ class Agent(kym.Agent) :
         self.seed = seed
         self.gamma = gamma
         self.epsilon = epsilon
-        keras.utils.set_random_seed(self.seed)
+        # keras.utils.set_random_seed(self.seed)  # Comment out this line when testing
         self.random = np.random.default_rng(self.seed)
         
     # ---------- Agent Helper Methods ----------
@@ -232,7 +232,7 @@ def train() :
         else : agent.epsilon = max(epsilon_min, agent.epsilon - epsilon_linear_decay)
         print(f"Episode {episode + 1}/{episodes} completed. | Total Reward: {total_reward:.2f} | Alive Time: {info.get('time_elapsed', 0.0):.2f} sec | Epsilon: {agent.epsilon:.4f}", end="\r")
     
-    agent.save("./moka_v9.keras")
+    agent.save("./moka_v10.keras")
     env.close()
 
 def test() :
@@ -242,7 +242,7 @@ def test() :
         bgm = True,
         obs_type = "custom"
     )
-    agent = Agent.load("./moka_v9.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
+    agent = Agent.load("./moka_v10.keras", seed = 42, gamma = 0.99, epsilon = 0.0)
     for _ in range(10) :    
         observation, info = env.reset()
         done = False
@@ -260,5 +260,5 @@ def test() :
 # ---------- End of Training & Testing ----------
     
 if __name__ == "__main__" :
-    train()
+    # train()
     test()
